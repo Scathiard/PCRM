@@ -1,0 +1,18 @@
+<local:OperationDialog x:Class="McResourceManager.Desktop.VaultChangeReviewDialog" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:local="clr-namespace:McResourceManager.Desktop" Title="资源导入与确认" Width="1120" Height="760" MinWidth="900" MinHeight="620" WindowStartupLocation="CenterOwner" Loaded="InitializeDialog" AllowDrop="True" Drop="FilesDropped">
+  <DockPanel Margin="24"><StackPanel DockPanel.Dock="Top"><TextBlock x:Name="Heading" Text="导入资源" Style="{StaticResource Title}"/><TextBlock Text="选择来源 → 确认类型与版本 → 可选部署到实例。导入只复制，源文件保持原样。" Style="{StaticResource Meta}" Margin="0,0,0,12"/></StackPanel>
+    <StackPanel DockPanel.Dock="Bottom"><ProgressBar x:Name="DialogProgress" IsIndeterminate="True" Height="3" Visibility="Collapsed"/><TextBlock x:Name="Feedback" Style="{StaticResource Meta}" Margin="0,10"/><Button Content="取消 / 关闭" Click="CancelDialog" HorizontalAlignment="Right"/></StackPanel>
+    <DockPanel x:Name="Form">
+      <StackPanel x:Name="SourcePanel" DockPanel.Dock="Top"><TextBlock Text="资源文件或文件夹（每行一个路径，也可拖入）" Style="{StaticResource Meta}"/><TextBox x:Name="SourcePaths" AcceptsReturn="True" Height="58" VerticalScrollBarVisibility="Auto" AutomationProperties.AutomationId="ImportPaths"/><WrapPanel><Button Content="选择文件" Click="PickFiles"/><Button Content="选择文件夹" Click="PickFolder"/><Button Content="识别并预览" Click="Analyze" Style="{StaticResource Primary}" AutomationProperties.AutomationId="AnalyzeImport"/></WrapPanel></StackPanel>
+      <StackPanel DockPanel.Dock="Bottom" Margin="0,12,0,0"><TextBlock Text="可选：入库后部署到这些实例" FontWeight="SemiBold"/><ItemsControl x:Name="InstanceChoices"><ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel><ItemsControl.ItemTemplate><DataTemplate><CheckBox Content="{Binding Name}" IsChecked="{Binding Selected}" Margin="0,10,18,6"/></DataTemplate></ItemsControl.ItemTemplate></ItemsControl><Button Content="确认所选条目入库" Click="Commit" Style="{StaticResource Primary}" HorizontalAlignment="Right" AutomationProperties.AutomationId="CommitIntake"/></StackPanel>
+      <DataGrid x:Name="IntakeGrid" Margin="0,10,0,0" AutomationProperties.AutomationId="IntakeGrid"><DataGrid.Columns>
+        <DataGridCheckBoxColumn Header="选择" Width="50" Binding="{Binding Selected,UpdateSourceTrigger=PropertyChanged}"/>
+        <DataGridTextColumn Header="源文件 / 文件夹" Width="180" Binding="{Binding Candidate.EntryName}" IsReadOnly="True"/>
+        <DataGridComboBoxColumn x:Name="TypeColumn" Header="类型（必选）" Width="140" DisplayMemberPath="Name" SelectedValuePath="TypeId" SelectedValueBinding="{Binding TypeId,UpdateSourceTrigger=PropertyChanged}"/>
+        <DataGridTextColumn Header="资源名称" Width="*" Binding="{Binding Name,UpdateSourceTrigger=PropertyChanged}"/>
+        <DataGridComboBoxColumn x:Name="MergeColumn" Header="归组到" Width="150" DisplayMemberPath="Name" SelectedValuePath="Id" SelectedValueBinding="{Binding MergeId,UpdateSourceTrigger=PropertyChanged}"/>
+        <DataGridTextColumn Header="版本" Width="80" Binding="{Binding Version,UpdateSourceTrigger=PropertyChanged}"/>
+        <DataGridTextColumn Header="检查结果" Width="170" Binding="{Binding Conflict}" IsReadOnly="True"/>
+      </DataGrid.Columns></DataGrid>
+    </DockPanel>
+  </DockPanel>
+</local:OperationDialog>

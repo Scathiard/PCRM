@@ -1,0 +1,24 @@
+# Public repository allowlist; internal material remains local.
+/*
+!/.gitignore
+!/.gitattributes
+!/README.md
+!/readme.en.md
+!/CHANGELOG.md
+!/LICENSE
+!/THIRD-PARTY-NOTICES.md
+!/work/
+/work/*
+!/work/src/
+!/work/tests/
+!/work/scripts/
+/work/scripts/*
+!/work/scripts/native.ps1
+!/work/scripts/ui-smoke.ps1
+
+**/bin/
+**/obj/
+**/node_modules/
+**/.env
+**/.env.*
+*.log

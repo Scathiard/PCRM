@@ -15,6 +15,7 @@ public sealed partial class ResourceManagerEngine
         var instance = Instance(instanceId);
         var resource = Resource(resourceId);
         var version = resource.Versions.Single(v => v.VersionId == versionId);
+        if (version.MasterEntryOverwritten) throw new IOException("此版本的主库文件已被覆盖，请选择其他可用版本。");
         var source = MasterEntry(resource, version);
         if (!ResourceFiles.Exists(source) || !ResourceFiles.ContentEquals(version.Files, await NtfsDriver.BuildEntryFingerprintsAsync(source, ct)))
             throw new IOException("主库中的此版本已缺失或被改写，不能用于部署，请检查主库变动。");

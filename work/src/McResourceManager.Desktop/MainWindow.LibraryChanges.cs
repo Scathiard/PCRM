@@ -15,6 +15,7 @@ public partial class MainWindow
         if (!_ready || _checkingChanges || _operation is not null || _index is null
             || Application.Current.Windows.OfType<OperationDialog>().Any()) return;
         _checkingChanges = true;
+        ReviewButton.IsEnabled = false;
         try
         {
             IReadOnlyList<VaultIntakeCandidateItem>? changes = null;
@@ -29,6 +30,6 @@ public partial class MainWindow
             await RunUi(RefreshAsync);
             if (dialog.Summary is { } summary) StatusText.Text = summary;
         }
-        finally { _checkingChanges = false; }
+        finally { _checkingChanges = false; ReviewButton.IsEnabled = _index is not null; }
     }
 }

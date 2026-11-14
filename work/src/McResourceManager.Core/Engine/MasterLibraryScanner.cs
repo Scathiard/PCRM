@@ -37,7 +37,7 @@ public sealed partial class ResourceManagerEngine
             foreach (var entry in EnumerateEntries(directory, type))
             {
                 var known = Index.Resources.Where(r => r.TypeId == type.TypeId).SelectMany(r => r.Versions)
-                    .Where(v => string.Equals(v.MasterEntryName, Path.GetFileName(entry), StringComparison.OrdinalIgnoreCase));
+                    .Where(v => !v.MasterEntryOverwritten && string.Equals(v.MasterEntryName, Path.GetFileName(entry), StringComparison.OrdinalIgnoreCase));
                 var unchanged = false;
                 foreach (var version in known)
                     if (await HasOriginalIdentityAsync(entry, version, ct)) { unchanged = true; break; }
@@ -60,15 +60,24 @@ public sealed partial class ResourceManagerEngine
         var name = Path.GetFileName(source);
         var (stem, label) = VaultStorage.ExtractStemAndVersion(name, isDirectory);
         var resources = Index.Resources.Where(r => r.TypeId == typeId).ToArray();
+        var owner = external ? null : resources.FirstOrDefault(r => r.Versions.Any(v => !v.MasterEntryOverwritten
+            && v.MasterEntryName.Equals(name, StringComparison.OrdinalIgnoreCase)));
+        suggested ??= owner;
         suggested ??= resources.FirstOrDefault(r => VaultStorage.ExtractStemAndVersion(r.StandardTargetName, isDirectory).NormalizedStem == stem);
-        var duplicate = resources.SelectMany(r => r.Versions.Select(v => (r, v)))
-            .FirstOrDefault(pair => pair.v.IsDirectory == isDirectory && ResourceFiles.ContentEquals(pair.v.Files, files));
-        var conflict = duplicate.v is not null ? VaultEntryConflictKind.ExactDuplicateInVault : VaultEntryConflictKind.None;
-        suggested ??= duplicate.r;
+        var conflict = VaultEntryConflictKind.None;
+        if (owner is null)
+            foreach (var pair in resources.SelectMany(r => r.Versions.Select(v => (r, v))))
+                if (!pair.v.MasterEntryOverwritten && pair.v.IsDirectory == isDirectory && ResourceFiles.ContentEquals(pair.v.Files, files)
+                    && await HasOriginalIdentityAsync(MasterEntry(pair.r, pair.v), pair.v, ct))
+                {
+                    conflict = VaultEntryConflictKind.ExactDuplicateInVault;
+                    suggested ??= pair.r;
+                    break;
+                }
         if (external && typeId is not null && ResourceFiles.Exists(ResourceFiles.Child(ResourceFiles.Child(Master, Type(typeId).MasterFolderName), name))
             && conflict == VaultEntryConflictKind.None) conflict = VaultEntryConflictKind.SameNameDifferentContentWillCoexist;
         var originalIds = files.Select(f => f.MasterFileId).ToHashSet();
-        if (!external && resources.SelectMany(r => r.Versions).Any(v => v.MasterEntryName.Equals(name, StringComparison.OrdinalIgnoreCase)
+        if (owner is not null && owner.Versions.Any(v => !v.MasterEntryOverwritten && v.MasterEntryName.Equals(name, StringComparison.OrdinalIgnoreCase)
             && v.Files.Any(f => originalIds.Contains(f.MasterFileId)) && !ResourceFiles.ContentEquals(v.Files, files)))
             conflict = VaultEntryConflictKind.ExternalInPlaceOverwrite;
         var affected = new List<string>();

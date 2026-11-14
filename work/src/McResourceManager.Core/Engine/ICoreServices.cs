@@ -135,7 +135,7 @@ public sealed record DeploymentResult(
 /// 【防屎山硬约束】：
 /// 1. WPF 界面层（McResourceManager.Desktop）只允许调用此接口，严禁在 UI 层直接调用 File / Directory API。
 /// 2. 实现类按职责拆分为小文件，每个实现文件不超过 250 行。
-/// 3. 严禁引入数据库框架或 Git 仓库，所有持久化仅通过原子替换读写 主库/.mcrm/index.json 与 work/data/machine-config.json。
+/// 3. 严禁引入数据库框架或 Git 仓库，所有持久化仅通过原子替换读写 主库/.pcrm/index.json 与 work/data/machine-config.json。
 /// </summary>
 public interface IResourceManagerEngine
 {
@@ -192,7 +192,7 @@ public interface IResourceManagerEngine
     /// <summary>
     /// 提交用户在【导入 / 主库变动确认弹窗】中的决定（TypeId 必填）：
     /// - 若 IsExternalImport 为 true：将源文件复制到 主库/&lt;类型&gt;/（同名异版自动加区分后缀并设 RestoreStandardNameOnDeploy = true，绝不覆盖已有版本；不改动外部源文件）；
-    /// - 写入 主库/.mcrm/index.json，并对 InstanceIdsToDeployOrUpgrade 中的实例执行硬链接投放或切换（顺带更新光影/材质配置引用与 .txt 参数继承）。
+    /// - 写入 主库/.pcrm/index.json，并对 InstanceIdsToDeployOrUpgrade 中的实例执行硬链接投放或切换（顺带更新光影/材质配置引用与 .txt 参数继承）。
     /// </summary>
     Task<IReadOnlyList<DeploymentResult>> CommitVaultIntakeAsync(
         IReadOnlyList<VaultIntakeCommitDecision> decisions,

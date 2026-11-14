@@ -3,13 +3,31 @@
     <StackPanel DockPanel.Dock="Bottom"><ProgressBar x:Name="DialogProgress" IsIndeterminate="True" Height="3" Visibility="Collapsed"/><TextBlock x:Name="Feedback" Style="{StaticResource Meta}" Margin="0,10"/><Button Content="取消 / 关闭" Click="CancelDialog" HorizontalAlignment="Right"/></StackPanel>
     <DockPanel x:Name="Form">
       <StackPanel x:Name="SourcePanel" DockPanel.Dock="Top"><TextBlock Text="资源文件或文件夹（每行一个路径，也可拖入）" Style="{StaticResource Meta}"/><TextBox x:Name="SourcePaths" AcceptsReturn="True" Height="58" VerticalScrollBarVisibility="Auto" AutomationProperties.AutomationId="ImportPaths"/><WrapPanel><Button Content="选择文件" Click="PickFiles"/><Button Content="选择文件夹" Click="PickFolder"/><Button Content="识别并预览" Click="Analyze" Style="{StaticResource Primary}" AutomationProperties.AutomationId="AnalyzeImport"/></WrapPanel></StackPanel>
-      <StackPanel DockPanel.Dock="Bottom" Margin="0,12,0,0"><TextBlock Text="可选：入库后部署到这些实例" FontWeight="SemiBold"/><ItemsControl x:Name="InstanceChoices"><ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel><ItemsControl.ItemTemplate><DataTemplate><CheckBox Content="{Binding Name}" IsChecked="{Binding Selected}" Margin="0,10,18,6"/></DataTemplate></ItemsControl.ItemTemplate></ItemsControl><Button Content="确认所选条目入库" Click="Commit" Style="{StaticResource Primary}" HorizontalAlignment="Right" AutomationProperties.AutomationId="CommitIntake"/></StackPanel>
-      <DataGrid x:Name="IntakeGrid" Margin="0,10,0,0" AutomationProperties.AutomationId="IntakeGrid"><DataGrid.Columns>
+      <Button DockPanel.Dock="Bottom" Content="确认所选条目入库" Click="Commit" Style="{StaticResource Primary}" HorizontalAlignment="Right" Margin="0,12,0,0" AutomationProperties.AutomationId="CommitIntake"/>
+      <DataGrid x:Name="IntakeGrid" Margin="0,10,0,0" RowDetailsVisibilityMode="Visible" AutomationProperties.AutomationId="IntakeGrid">
+        <DataGrid.RowDetailsTemplate>
+          <DataTemplate>
+            <StackPanel Margin="52,3,12,10" IsEnabled="{Binding Selected}">
+              <TextBlock Text="{Binding TargetHeading}" Style="{StaticResource Meta}"/>
+              <ItemsControl ItemsSource="{Binding Targets}" AutomationProperties.AutomationId="IntakeTargets">
+                <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate><DataTemplate>
+                  <CheckBox Content="{Binding Caption}" IsChecked="{Binding Selected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                            IsEnabled="{Binding CanSelect}" Margin="0,5,18,0" AutomationProperties.AutomationId="IntakeTarget"/>
+                </DataTemplate></ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </DataTemplate>
+        </DataGrid.RowDetailsTemplate>
+        <DataGrid.Columns>
         <DataGridCheckBoxColumn Header="选择" Width="50" Binding="{Binding Selected,UpdateSourceTrigger=PropertyChanged}"/>
         <DataGridTextColumn Header="源文件 / 文件夹" Width="180" Binding="{Binding Candidate.EntryName}" IsReadOnly="True"/>
         <DataGridComboBoxColumn x:Name="TypeColumn" Header="类型（必选）" Width="140" DisplayMemberPath="Name" SelectedValuePath="TypeId" SelectedValueBinding="{Binding TypeId,UpdateSourceTrigger=PropertyChanged}"/>
         <DataGridTextColumn Header="资源名称" Width="*" Binding="{Binding Name,UpdateSourceTrigger=PropertyChanged}"/>
-        <DataGridComboBoxColumn x:Name="MergeColumn" Header="归组到" Width="150" DisplayMemberPath="Name" SelectedValuePath="Id" SelectedValueBinding="{Binding MergeId,UpdateSourceTrigger=PropertyChanged}"/>
+        <DataGridTemplateColumn Header="归组到" Width="150"><DataGridTemplateColumn.CellTemplate><DataTemplate>
+          <ComboBox ItemsSource="{Binding Groups}" DisplayMemberPath="Name" SelectedValuePath="Id"
+                    SelectedValue="{Binding GroupId,Mode=TwoWay,UpdateSourceTrigger=PropertyChanged}" AutomationProperties.AutomationId="IntakeGroup"/>
+        </DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
         <DataGridTextColumn Header="版本" Width="80" Binding="{Binding Version,UpdateSourceTrigger=PropertyChanged}"/>
         <DataGridTextColumn Header="检查结果" Width="170" Binding="{Binding Conflict}" IsReadOnly="True"/>
       </DataGrid.Columns></DataGrid>

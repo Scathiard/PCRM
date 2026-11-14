@@ -1,26 +1,9 @@
 using System.Windows;
+using McResourceManager.Core.Domain;
 using McResourceManager.Core.Engine;
 using Microsoft.Win32;
 
 namespace McResourceManager.Desktop;
-
-internal sealed record MergeChoice(string? Id, string Name);
-internal sealed class IntakeRow
-{
-    public required VaultIntakeCandidateItem Candidate { get; init; }
-    public bool Selected { get; set; }
-    public string? TypeId { get; set; }
-    public string? MergeId { get; set; }
-    public string Name { get; set; } = "";
-    public string Version { get; set; } = "";
-    public string Conflict => Candidate.ConflictKind switch
-    {
-        VaultEntryConflictKind.ExactDuplicateInVault => "已存在 · 默认跳过",
-        VaultEntryConflictKind.SameNameDifferentContentWillCoexist => "同名不同内容 · 保留两版",
-        VaultEntryConflictKind.ExternalInPlaceOverwrite => $"外部覆盖 · 影响 {Candidate.AffectedInstanceIds.Count} 个实例",
-        _ => Candidate.RecognizedTypeId is null ? "需手动指定类型" : "可安全入库"
-    };
-}
 
 public partial class VaultChangeReviewDialog : OperationDialog
 {
@@ -29,7 +12,6 @@ public partial class VaultChangeReviewDialog : OperationDialog
     private readonly string? _preselectedInstance;
     private readonly bool _review;
     private List<IntakeRow> _rows = [];
-    private List<SelectableInstance> _instances = [];
     public string? Summary { get; private set; }
     public VaultChangeReviewDialog(IResourceManagerEngine engine, string[] paths, string? preselectedType = null,
         string? preselectedInstance = null, bool reviewMaster = false)
@@ -41,11 +23,6 @@ public partial class VaultChangeReviewDialog : OperationDialog
     }
     private async void InitializeDialog(object sender, RoutedEventArgs e) => await Perform(async ct =>
     {
-        var (machine, index) = await _engine.GetSnapshotAsync(ct);
-        TypeColumn.ItemsSource = index!.ResourceTypes;
-        MergeColumn.ItemsSource = new[] { new MergeChoice(null, "作为新资源") }.Concat(index.Resources.Select(r => new MergeChoice(r.ResourceId, r.DisplayName))).ToArray();
-        _instances = machine.Instances.Select(i => new SelectableInstance { Id = i.InstanceId, Name = i.DisplayName, Selected = i.InstanceId == _preselectedInstance }).ToList();
-        InstanceChoices.ItemsSource = _instances;
         if (_review || !string.IsNullOrWhiteSpace(SourcePaths.Text)) await AnalyzeAsync(ct);
     });
     private void PickFiles(object sender, RoutedEventArgs e)
@@ -61,15 +38,44 @@ public partial class VaultChangeReviewDialog : OperationDialog
     private async void Analyze(object sender, RoutedEventArgs e) => await Perform(AnalyzeAsync);
     private async Task AnalyzeAsync(CancellationToken ct)
     {
+        _rows.Clear();
+        IntakeGrid.ItemsSource = null;
         var paths = SourcePaths.Text.Split(['\r', '\n'], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
         if (!_review && paths.Length == 0) throw new ArgumentException("请选择或拖入资源文件。");
         var candidates = _review ? await _engine.ScanMasterVaultChangesAsync(ct)
             : await _engine.AnalyzeExternalImportPathsAsync(paths, _preselectedType, preselectedInstanceId: _preselectedInstance, ct: ct);
-        _rows = candidates.Select(c => new IntakeRow { Candidate = c, Selected = c.ConflictKind != VaultEntryConflictKind.ExactDuplicateInVault,
-            TypeId = c.RecognizedTypeId, MergeId = c.SuggestedResourceId, Name = c.SuggestedResourceName ?? c.EntryName, Version = c.GuessedVersionLabel }).ToList();
+        var (machine, index) = await _engine.GetSnapshotAsync(ct);
+        TypeColumn.ItemsSource = index!.ResourceTypes;
+        var users = new List<(string ResourceId, IntakeTarget Target)>();
+        var scanWarnings = new List<string>();
+        if (candidates.Count > 0 && index.Resources.Count > 0)
+            foreach (var instance in machine.Instances)
+            {
+                try
+                {
+                    var entries = await _engine.ResolveInstanceResourcesAsync(instance.InstanceId, ct);
+                    foreach (var group in entries.Where(v => v.MatchedResourceId is not null).GroupBy(v => v.MatchedResourceId!))
+                    {
+                        var labels = group.Select(v => v.State switch
+                        {
+                            MountState.TamperedAlert => $"登记 {v.MatchedVersionLabel} · 内容异常",
+                            MountState.ControlledCopy => $"{v.MatchedVersionLabel ?? "版本未记录"} · 独立副本",
+                            _ => $"当前 {v.MatchedVersionLabel}"
+                        });
+                        var single = group.Count() == 1;
+                        var caption = $"{instance.DisplayName} · {string.Join(" / ", labels)}" + (single ? "" : " · 有多个同资源条目，请先整理");
+                        users.Add((group.Key, new(instance.InstanceId, caption, single)));
+                    }
+                }
+                catch (Exception error) when (error is System.IO.IOException or UnauthorizedAccessException)
+                { scanWarnings.Add($"{instance.DisplayName}（{error.Message}）"); }
+            }
+        var usage = users.ToLookup(pair => pair.ResourceId, pair => pair.Target);
+        _rows = candidates.Select(c => new IntakeRow(c, machine.Instances, index.Resources, usage)).ToList();
         IntakeGrid.ItemsSource = _rows;
-        Message(candidates.Count == 0 ? "没有待处理的主库变动。" : $"已识别 {candidates.Count} 项；请确认类型、归组和版本，勾选后才会修改文件。"
-            + (candidates.Any(c => c.ConflictKind == VaultEntryConflictKind.ExternalInPlaceOverwrite) ? " 外部覆盖前的内容无法自动恢复；确认表示接纳当前内容为新版本。" : ""));
+        Message(candidates.Count == 0 ? "没有待处理的主库变动。" : $"已识别 {candidates.Count} 项。"
+            + (candidates.Any(c => c.ConflictKind == VaultEntryConflictKind.ExternalInPlaceOverwrite) ? " 已共享的文件可能已被外部改写。确认将接纳当前内容，被覆盖的原版无法从主库回退。" : "")
+            + (scanWarnings.Count > 0 ? " 未能读取以下实例的当前版本：" + string.Join("、", scanWarnings) : ""));
     }
     private async void Commit(object sender, RoutedEventArgs e)
     {
@@ -79,9 +85,7 @@ public partial class VaultChangeReviewDialog : OperationDialog
         if (selected.Any(r => string.IsNullOrWhiteSpace(r.TypeId))) { Message("仍有条目未指定类型，请选择类型或取消勾选这些项。"); return; }
         await Perform(async ct =>
         {
-            var instances = _instances.Where(i => i.Selected).Select(i => i.Id).ToArray();
-            var decisions = selected.Select(r => new VaultIntakeCommitDecision(r.Candidate.SourceFullPath, r.Candidate.IsExternalImport,
-                r.TypeId!, r.MergeId, r.Name, r.Version, instances)).ToArray();
+            var decisions = selected.Select(row => row.Decision()).ToArray();
             var results = await _engine.CommitVaultIntakeAsync(decisions, ct);
             var warnings = results.Where(r => !r.Success || r.CompanionWarning is not null).Select(r => r.CompanionWarning).ToArray();
             Summary = $"已处理 {selected.Length} 项资源，部署成功 {results.Count(r => r.Success)} 项。" + string.Join("；", warnings);

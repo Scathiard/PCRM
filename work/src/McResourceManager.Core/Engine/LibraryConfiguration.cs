@@ -13,9 +13,7 @@ public sealed partial class ResourceManagerEngine
         if (_machine.Instances.Any(i => Overlaps(i.RootPath, path))
             || _machine.ReplicaVaultPathsByVolume.Values.Any(cache => Overlaps(cache, path)))
             throw new IOException("主库不能与实例或共享缓存区重叠。");
-        _ = ResourceFiles.Child(path, ".mcrm/index.json");
-        var index = await VaultStorage.LoadMasterIndexAsync(path, ct);
-        foreach (var type in index.ResourceTypes) ValidateType(type);
+        var index = await LoadVaultIndexAsync(path, ct);
 
         // 在刷新物理标识前保留已识别实例的版本归属，不替玩家搬动或重写实例。
         if (_index is not null)
@@ -34,7 +32,7 @@ public sealed partial class ResourceManagerEngine
             {
                 ct.ThrowIfCancellationRequested();
                 var entry = ResourceFiles.Child(ResourceFiles.Child(path, type.MasterFolderName), version.MasterEntryName);
-                if (ResourceFiles.Exists(entry) && Directory.Exists(entry) == version.IsDirectory)
+                if (!version.MasterEntryOverwritten && ResourceFiles.Exists(entry) && Directory.Exists(entry) == version.IsDirectory)
                 {
                     var actual = await NtfsDriver.BuildEntryFingerprintsAsync(entry, ct);
                     // 迁库只更新锚点；内容被改写时保留原账本，继续报告异常。

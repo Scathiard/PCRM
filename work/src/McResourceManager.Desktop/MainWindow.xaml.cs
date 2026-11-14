@@ -39,11 +39,11 @@ public partial class MainWindow : Window
     private async Task RunUi(Func<CancellationToken, Task> work)
     {
         if (_operation is not null) return;
-        _operation = new(); BusyBar.Visibility = CancelButton.Visibility = Visibility.Visible;
+        _operation = new(); ReviewButton.IsEnabled = false; BusyBar.Visibility = CancelButton.Visibility = Visibility.Visible;
         try { await work(_operation.Token); }
         catch (OperationCanceledException) { StatusText.Text = "操作已取消；已经完成的条目保留，可刷新查看。"; }
         catch (Exception error) { StatusText.Text = error.Message; StatusText.ToolTip = error.ToString(); }
-        finally { _operation.Dispose(); _operation = null; BusyBar.Visibility = CancelButton.Visibility = Visibility.Collapsed; }
+        finally { _operation.Dispose(); _operation = null; ReviewButton.IsEnabled = !_checkingChanges && _index is not null; BusyBar.Visibility = CancelButton.Visibility = Visibility.Collapsed; }
     }
 
     private async Task RefreshAsync(CancellationToken ct)
@@ -103,7 +103,7 @@ public partial class MainWindow : Window
         {
             var version = r.Versions.Single(v => v.VersionId == r.LatestVersionId);
             return MakeRow(r.TypeId, r.DisplayName, version.MasterEntryName,
-                System.IO.Path.Combine(_machine.MasterVaultPath!, _index.ResourceTypes.Single(t => t.TypeId == r.TypeId).MasterFolderName, version.MasterEntryName), r, version.VersionId, null);
+                version.MasterEntryOverwritten ? "" : System.IO.Path.Combine(_machine.MasterVaultPath!, _index.ResourceTypes.Single(t => t.TypeId == r.TypeId).MasterFolderName, version.MasterEntryName), r, version.VersionId, null);
         }).ToList() : (_instanceId is not null && _states.TryGetValue(_instanceId, out var states) ? states : [])
             .Select(v => MakeRow(v.TypeId, v.MatchedResourceName ?? v.InstanceEntryName, v.InstanceEntryName, v.InstanceEntryFullPath,
                 _index.Resources.FirstOrDefault(r => r.ResourceId == v.MatchedResourceId), v.MatchedVersionId, v.State)).ToList();
@@ -116,7 +116,7 @@ public partial class MainWindow : Window
         var version = resource?.Versions.FirstOrDefault(v => v.VersionId == versionId);
         return new() { Group = $"{type.Name}   ·   {type.InstanceRelativePath}", TypeId = typeId, Name = name, FileName = file,
             FullPath = path, Resource = resource, ResourceId = resource?.ResourceId, VersionId = versionId, State = state,
-            VersionCaption = version is null ? "先收编" : $"{version.VersionLabel} {(version.VersionId == resource!.LatestVersionId ? "最新" : "旧版")} ▾",
+            VersionCaption = version is null ? "先收编" : $"{version.VersionLabel} {(version.MasterEntryOverwritten ? "主库已被覆盖" : version.VersionId == resource!.LatestVersionId ? "最新" : "旧版")} ▾",
             Cover = ResourceRow.LoadCover(resource?.CustomCoverRelativePath is { } cover ? System.IO.Path.Combine(_machine!.MasterVaultPath!, cover) : null) };
     }
 

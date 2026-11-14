@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using McResourceManager.Core.Domain;
+using McResourceManager.Core.FileSystem;
 
 namespace McResourceManager.Core.Storage;
 
@@ -12,7 +13,7 @@ namespace McResourceManager.Core.Storage;
 /// </summary>
 public static partial class VaultStorage
 {
-    public const string MasterMetaFolderName = ".mcrm";
+    public const string MasterMetaFolderName = ".pcrm";
     public const string MasterIndexFileName = "index.json";
     public const string MasterCoversFolderName = "covers";
 
@@ -79,26 +80,26 @@ public static partial class VaultStorage
     }
 
     /// <summary>
-    /// 读取主库根目录下的 主库/.mcrm/index.json；若不存在则初始化空账本。
+    /// 打开现有账本，首次打开旧主库时保留原元数据并建立 PCRM 账本。
     /// </summary>
     public static async Task<MasterVaultIndex> LoadMasterIndexAsync(string masterVaultRoot, CancellationToken ct = default)
     {
-        var indexPath = Path.Combine(masterVaultRoot, MasterMetaFolderName, MasterIndexFileName);
-        if (!File.Exists(indexPath))
-        {
-            return new MasterVaultIndex(
-                SchemaVersion: 1,
-                ResourceTypes: GetBuiltInTypePresets(),
-                Resources: []);
-        }
+        var indexPath = ResourceFiles.Child(masterVaultRoot, Path.Combine(MasterMetaFolderName, MasterIndexFileName));
+        if (!File.Exists(indexPath)) await ImportLegacyMetadataAsync(masterVaultRoot, ct).ConfigureAwait(false);
+        if (File.Exists(indexPath)) return await ReadIndexAsync(indexPath, ct).ConfigureAwait(false);
+        if (Directory.Exists(indexPath)) throw new IOException($"账本路径已被文件夹占用：{indexPath}");
+        return new MasterVaultIndex(SchemaVersion: 1, ResourceTypes: GetBuiltInTypePresets(), Resources: []);
+    }
 
+    private static async Task<MasterVaultIndex> ReadIndexAsync(string indexPath, CancellationToken ct)
+    {
         await using var stream = File.OpenRead(indexPath);
         return await JsonSerializer.DeserializeAsync<MasterVaultIndex>(stream, JsonOptions, ct).ConfigureAwait(false)
             ?? throw new InvalidDataException($"无法解析主库索引文件：{indexPath}");
     }
 
     /// <summary>
-    /// 原子保存 主库/.mcrm/index.json，并确保各资源类型的明文物理目录存在。
+    /// 原子保存主库账本，并确保各资源类型的明文物理目录存在。
     /// </summary>
     public static async Task SaveMasterIndexAsync(string masterVaultRoot, MasterVaultIndex index, CancellationToken ct = default)
     {

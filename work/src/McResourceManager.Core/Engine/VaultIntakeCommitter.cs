@@ -1,5 +1,6 @@
 using McResourceManager.Core.Domain;
 using McResourceManager.Core.FileSystem;
+using McResourceManager.Core.Storage;
 
 namespace McResourceManager.Core.Engine;
 
@@ -49,16 +50,18 @@ public sealed partial class ResourceManagerEngine
         if (sourceFiles.Count == 0) throw new ArgumentException("空文件夹没有可入库的资源文件。");
         if (NtfsDriver.IsInternalTempOrBackupName(Path.GetFileName(source))) throw new ArgumentException("此文件名属于恢复材料，请先恢复或改名。");
         var resource = decision.MergeIntoResourceId is { } id ? Resource(id) : null;
-        foreach (var existingResource in Index.Resources.Where(r => r.TypeId == type.TypeId
-            && (resource is null || r.ResourceId == resource.ResourceId)))
-            foreach (var existingVersion in existingResource.Versions)
-                if (existingVersion.IsDirectory == isDirectory && ResourceFiles.ContentEquals(sourceFiles, existingVersion.Files)
-                    && await HasOriginalIdentityAsync(MasterEntry(existingResource, existingVersion), existingVersion, ct))
-                    return (existingResource, existingVersion);
-
         var entryName = Path.GetFileName(source);
+        var active = Index.Resources.Where(r => r.TypeId == type.TypeId)
+            .SelectMany(r => r.Versions.Where(v => !v.MasterEntryOverwritten).Select(v => (Resource: r, Version: v))).ToArray();
+        var owners = active.Where(pair => !decision.IsExternalImport &&
+            pair.Version.MasterEntryName.Equals(entryName, StringComparison.OrdinalIgnoreCase)).ToArray();
+        // Accepting a change to a known path must reconcile that path even when another file has identical bytes.
+        var duplicates = owners.Length > 0 ? owners : active.Where(pair => resource is null || pair.Resource.ResourceId == resource.ResourceId);
+        foreach (var pair in duplicates)
+            if (pair.Version.IsDirectory == isDirectory && ResourceFiles.ContentEquals(sourceFiles, pair.Version.Files)
+                && await HasOriginalIdentityAsync(MasterEntry(pair.Resource, pair.Version), pair.Version, ct)) return pair;
         var destination = source;
-        var renamed = false;
+        var renamed = owners.Any(pair => pair.Resource.ResourceId == resource?.ResourceId && pair.Version.RestoreStandardNameOnDeploy);
         if (decision.IsExternalImport)
         {
             destination = ResourceFiles.Child(folder, entryName);
@@ -81,16 +84,18 @@ public sealed partial class ResourceManagerEngine
             }
             finally { if (ResourceFiles.Exists(stage)) ResourceFiles.Delete(stage); }
         }
-        var fingerprints = await NtfsDriver.BuildEntryFingerprintsAsync(destination, CancellationToken.None);
+        var fingerprints = decision.IsExternalImport ? await NtfsDriver.BuildEntryFingerprintsAsync(destination, CancellationToken.None) : sourceFiles;
         var version = new ResourceVersion(NewId(), string.IsNullOrWhiteSpace(decision.VersionLabel) ? "默认" : decision.VersionLabel.Trim(),
             Path.GetFileName(destination), isDirectory, renamed, fingerprints.Sum(f => f.Size), DateTime.UtcNow.Ticks, fingerprints);
-        resource ??= new(NewId(), type.TypeId, decision.DisplayResourceName.Trim(), entryName, version.VersionId, "", null, []);
+        _index = MarkOverwritten(Index, owners.Select(pair => pair.Version.VersionId).ToHashSet());
+        resource = resource is null ? new(NewId(), type.TypeId, decision.DisplayResourceName.Trim(), entryName, version.VersionId, "", null, [])
+            : Resource(resource.ResourceId);
         resource = resource with { LatestVersionId = version.VersionId, Versions = resource.Versions.Append(version).ToArray() };
         var metadata = await ArchiveInspector.TryReadAsync(destination);
         if (string.IsNullOrEmpty(resource.Description)) resource = resource with { Description = metadata.Description };
         if (resource.CustomCoverRelativePath is null && metadata.CoverPng is not null)
         {
-            var cover = $".mcrm/covers/{resource.ResourceId}-{version.VersionId}.png";
+            var cover = $"{VaultStorage.MasterMetaFolderName}/{VaultStorage.MasterCoversFolderName}/{resource.ResourceId}-{version.VersionId}.png";
             try
             {
                 await File.WriteAllBytesAsync(ResourceFiles.Child(Master, cover), metadata.CoverPng);

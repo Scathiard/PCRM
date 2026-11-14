@@ -42,10 +42,16 @@ public partial class MainWindow
     }
     private async void ReviewChanges(object sender, RoutedEventArgs e)
     {
-        if (_index is null || _operation is not null) return;
-        var dialog = new VaultChangeReviewDialog(_engine, [], reviewMaster: true) { Owner = this };
-        dialog.ShowDialog(); await RunUi(RefreshAsync);
-        if (dialog.Summary is { } summary) StatusText.Text = summary;
+        if (_index is null || _operation is not null || _checkingChanges) return;
+        _checkingChanges = true;
+        ReviewButton.IsEnabled = false;
+        try
+        {
+            var dialog = new VaultChangeReviewDialog(_engine, [], reviewMaster: true) { Owner = this };
+            dialog.ShowDialog(); await RunUi(RefreshAsync);
+            if (dialog.Summary is { } summary) StatusText.Text = summary;
+        }
+        finally { _checkingChanges = false; ReviewButton.IsEnabled = _index is not null; }
     }
     private async void HarvestInstances(object sender, RoutedEventArgs e)
     {

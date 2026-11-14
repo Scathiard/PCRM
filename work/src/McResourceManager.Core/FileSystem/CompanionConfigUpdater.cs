@@ -106,7 +106,7 @@ public static class CompanionConfigUpdater
         if (changed == text) return;
         var bytes = utf8.GetBytes(changed);
         if (hasBom) bytes = new byte[] { 0xEF, 0xBB, 0xBF }.Concat(bytes).ToArray();
-        var stage = ResourceFiles.Child(Path.GetDirectoryName(path)!, $".mcrm-config.{Path.GetFileName(path)}.{Guid.NewGuid():N}");
+        var stage = ResourceFiles.Child(Path.GetDirectoryName(path)!, $".pcrm-config.{Path.GetFileName(path)}.{Guid.NewGuid():N}");
         try
         {
             await using (var stream = new FileStream(stage, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, true))

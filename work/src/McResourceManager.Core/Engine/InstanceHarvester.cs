@@ -27,7 +27,7 @@ public sealed partial class ResourceManagerEngine
                 var name = Path.GetFileName(path);
                 var duplicates = Index.Resources.Where(r => r.TypeId == typeId)
                     .SelectMany(r => r.Versions.Select(v => (Resource: r, Version: v)))
-                    .Where(pair => pair.Version.IsDirectory == directory && ResourceFiles.ContentEquals(files, pair.Version.Files));
+                    .Where(pair => !pair.Version.MasterEntryOverwritten && pair.Version.IsDirectory == directory && ResourceFiles.ContentEquals(files, pair.Version.Files));
                 (LogicalResource? Resource, ResourceVersion? Version) duplicate = (null, null);
                 foreach (var pair in duplicates)
                     if (await HasOriginalIdentityAsync(MasterEntry(pair.Resource, pair.Version), pair.Version, ct)) { duplicate = pair; break; }

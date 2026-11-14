@@ -66,7 +66,12 @@ public sealed record ResourceVersion(
     long TotalSizeBytes,
     long CreatedAtUtcTicks,
     IReadOnlyList<FileEntryFingerprint> Files
-);
+)
+{
+    // 保留实例的版本归属与缓存指纹。失效后的文件名只用于历史和旧缓存定位。
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public bool MasterEntryOverwritten { get; init; }
+}
 
 /// <summary>
 /// 一个逻辑资源条目（如 "BSL 光影"），主显 LatestVersionId，其余版本在同行版本胶囊弹出面板中展示。
@@ -96,7 +101,7 @@ public sealed record ResourceTypeDefinition(
 );
 
 /// <summary>
-/// 存储在【主库/.mcrm/index.json】中的随库账本（重装系统或迁移主库硬盘时完整保留）。
+/// 存储在【主库/.pcrm/index.json】中的随库账本（重装系统或迁移主库硬盘时完整保留）。
 /// </summary>
 public sealed record MasterVaultIndex(
     int SchemaVersion,

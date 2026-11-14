@@ -53,7 +53,7 @@ internal static partial class Program
         using (var stream = File.Create(source)) stream.SetLength(128L * 1024 * 1024);
         var originalHash = await NtfsDriver.ComputeFileSha256Async(source);
         using var cancel = new CancellationTokenSource();
-        using var watch = new FileSystemWatcher(Path.Combine(f.Master, "ysm_models"), ".mcrm-stage.*");
+        using var watch = new FileSystemWatcher(Path.Combine(f.Master, "ysm_models"), ".pcrm-stage.*");
         var stageCreated = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         watch.Created += (_, _) => { cancel.Cancel(); stageCreated.TrySetResult(); };
         watch.EnableRaisingEvents = true;

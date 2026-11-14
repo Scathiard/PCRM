@@ -12,7 +12,7 @@ using McResourceManager.Desktop;
 
 namespace McResourceManager.DesktopTests;
 
-internal static class Program
+internal static partial class Program
 {
     private static string _workspace = "";
     private static string _root = "";
@@ -30,7 +30,7 @@ internal static class Program
         Console.WriteLine("UI_FIXTURE_ROOT " + _root);
         _app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
         _app.DispatcherUnhandledException += (_, e) => { _uiFailure = e.Exception; e.Handled = true; };
-        _app.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/MCRM;component/Themes/Sky.xaml", UriKind.Relative) });
+        _app.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/PCRM;component/Themes/Sky.xaml", UriKind.Relative) });
         _main = new MainWindow(new ResourceManagerEngine(Path.Combine(_root, "machine-config.json")));
         _app.Dispatcher.BeginInvoke(async () => await Run(args.Contains("--hold")));
         _app.Run(_main);
@@ -52,6 +52,7 @@ internal static class Program
                 File.WriteAllText(Path.Combine(instance, "config/iris.properties"), "shaderPack=GenericShader_v1.0.zip\n");
             }
             var onboarding = await Window<FirstRunOnboardingDialog>();
+            await Wait(() => Find(onboarding, "MasterPath").IsEnabled);
             Set(onboarding, "MasterPath", Path.Combine(_root, "library")); Click(onboarding, "ConfigureLibrary");
             await Wait(() => Find(onboarding, "InstancePath").IsVisible);
             Set(onboarding, "InstancePath", Path.GetDirectoryName(Path.GetDirectoryName(launcher)!)!); Click(onboarding, "ProbeInstances");
@@ -88,7 +89,7 @@ internal static class Program
             Check(File.Exists(a1), "Selecting a version modified files before confirmation.");
             Click((FrameworkElement)((System.Windows.Controls.Primitives.Popup)_main.FindName("VersionPopup")).Child, "ConfirmVersion");
             var a2 = Path.Combine(launcher, "Pack A/shaderpacks/GenericShader_v2.0.zip");
-            await Wait(() => File.Exists(a2) && !File.Exists(a1));
+            await Wait(() => File.Exists(a2) && !File.Exists(a1) && ((ProgressBar)_main.FindName("BusyBar")).Visibility == Visibility.Collapsed);
             Check(File.Exists(b1) && File.ReadAllText(Path.Combine(launcher, "Pack A/config/iris.properties")).Contains("v2.0"), "Confirmed switch damaged old instance or companion config.");
             Evidence.Add("版本弹窗：仅选版本不会写文件；确认后 A 升级、B 保旧，Iris 引用随 A 更新。");
             Click(_main, "LibraryTab");
@@ -148,20 +149,23 @@ internal static class Program
             targetPicker.SelectedItem = targetPicker.Items.Cast<McResourceManager.Core.Domain.GameInstance>().Single(i => i.DisplayName == "Pack B");
             Check(CurrentCaption().Contains("v1.0") && File.Exists(a2) && File.Exists(b1), "Changing the target instance misreported the current version or wrote files.");
             Evidence.Add("资源库版本浮层按目标实例标出当前版本，切换目标只更新显示而不修改文件。");
+            ((System.Windows.Controls.Primitives.Popup)_main.FindName("VersionPopup")).IsOpen = false;
+            await ReviewPerResource(launcher);
             _result = 0;
             Console.WriteLine("PASS WPF smoke workflow; " + string.Join(" | ", Evidence));
             if (hold)
             {
                 _main.Close();
-                var start = new System.Diagnostics.ProcessStartInfo(Path.Combine(_workspace, "releases/dist/native/MCRM.exe")) { WorkingDirectory = _workspace };
+                var start = new System.Diagnostics.ProcessStartInfo(Path.Combine(_workspace, "releases/dist/native/PCRM.exe")) { WorkingDirectory = _workspace };
                 start.ArgumentList.Add("--config"); start.ArgumentList.Add(Path.Combine(_root, "machine-config.json"));
                 using var packaged = System.Diagnostics.Process.Start(start) ?? throw new IOException("Packaged executable did not start.");
                 await Wait(() => { packaged.Refresh(); return packaged.HasExited || packaged.MainWindowHandle != IntPtr.Zero; });
                 Check(!packaged.HasExited, "Packaged executable exited before showing a window.");
+                Check(packaged.MainWindowTitle == "PCRM - Plain Craft Resources Manager", "Published program opened under the old name.");
                 Console.WriteLine($"WPF_QA_WINDOW_READY pid={packaged.Id} fixture={_root}");
                 await Wait(() => packaged.HasExited, 600000);
                 Check(packaged.ExitCode == 0, "Packaged executable exited abnormally.");
-                Evidence.Add("发布后的 MCRM.exe 已实际启动并正常关闭。");
+                Evidence.Add("发布后的 PCRM.exe 已实际启动并正常关闭。");
             }
         }
         catch (Exception error) { _result = 1; Console.WriteLine("FAIL WPF smoke workflow\n" + error); Evidence.Add(error.ToString()); SaveScreenshot("ui-failure.png"); }
@@ -199,7 +203,7 @@ internal static class Program
     }
     private static void Set(FrameworkElement root, string id, string value) => ((TextBox)Find(root, id)).Text = value;
     private static void Click(FrameworkElement root, string id) => _app.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background, new Action(() =>
-    { try { ((Button)Find(root, id)).RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); } catch (Exception error) { _uiFailure = error; } }));
+    { try { var button = (Button)Find(root, id); Check(button.IsEnabled, "Attempt to click a disabled button: " + id); button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); } catch (Exception error) { _uiFailure = error; } }));
     private static async Task Wait(Func<bool> condition, int timeout = 20000)
     {
         var clock = System.Diagnostics.Stopwatch.StartNew();

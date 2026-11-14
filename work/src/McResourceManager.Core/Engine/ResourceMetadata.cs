@@ -1,5 +1,6 @@
 using McResourceManager.Core.Domain;
 using McResourceManager.Core.FileSystem;
+using McResourceManager.Core.Storage;
 
 namespace McResourceManager.Core.Engine;
 
@@ -33,7 +34,7 @@ public sealed partial class ResourceManagerEngine
         {
             var extension = Path.GetExtension(newCoverSourceFilePath).ToLowerInvariant();
             if (!new[] { ".png", ".jpg", ".jpeg", ".webp", ".bmp" }.Contains(extension)) throw new ArgumentException("请选择图片文件。");
-            cover = $".mcrm/covers/{resourceId}-{NewId()}{extension}";
+            cover = $"{VaultStorage.MasterMetaFolderName}/{VaultStorage.MasterCoversFolderName}/{resourceId}-{NewId()}{extension}";
             await ResourceFiles.CopyAsync(newCoverSourceFilePath, ResourceFiles.Child(Master, cover), ct);
         }
         PutResource(resource with { DisplayName = displayName.Trim(), Description = description, CustomCoverRelativePath = cover });
@@ -51,11 +52,11 @@ public sealed partial class ResourceManagerEngine
                 versionId, source.Description, source.CustomCoverRelativePath, []);
         if (target.TypeId != source.TypeId) throw new ArgumentException("只能合并相同类型的资源版本。");
         var combined = target.Versions.Append(version).ToArray();
-        PutResource(target with { Versions = combined, LatestVersionId = combined.MaxBy(v => v.CreatedAtUtcTicks)!.VersionId });
+        PutResource(target with { Versions = combined, LatestVersionId = PreferredLatest(combined).VersionId });
         var remaining = source.Versions.Where(v => v.VersionId != versionId).ToArray();
         if (remaining.Length == 0) _index = Index with { Resources = Index.Resources.Where(r => r.ResourceId != sourceResourceId).ToArray() };
         else PutResource(source with { Versions = remaining, LatestVersionId = source.LatestVersionId == versionId
-            ? remaining.MaxBy(v => v.CreatedAtUtcTicks)!.VersionId : source.LatestVersionId });
+            ? PreferredLatest(remaining).VersionId : source.LatestVersionId });
         _machine = _machine with { ControlledCopies = _machine.ControlledCopies.Select(c => c.ResourceId == sourceResourceId
             && c.SourceVersionId == versionId ? c with { ResourceId = target.ResourceId } : c).ToArray() };
         await SaveIndexAsync();

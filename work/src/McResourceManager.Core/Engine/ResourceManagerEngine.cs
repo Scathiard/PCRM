@@ -47,9 +47,7 @@ public sealed partial class ResourceManagerEngine : IResourceManagerEngine
                 ?? throw new InvalidDataException("本机配置无法读取，请保留原文件后检查。")
             : new(null, new(StringComparer.OrdinalIgnoreCase), [], [], []);
         _machine = _machine with { ReplicaVaultPathsByVolume = new(_machine.ReplicaVaultPathsByVolume, StringComparer.OrdinalIgnoreCase) };
-        _index = _machine.MasterVaultPath is { } root ? await VaultStorage.LoadMasterIndexAsync(root, ct) : null;
-        if (_index is not null)
-            foreach (var type in _index.ResourceTypes) ValidateType(type);
+        _index = _machine.MasterVaultPath is { } root ? await LoadVaultIndexAsync(root, ct) : null;
         _loaded = true;
     }
 

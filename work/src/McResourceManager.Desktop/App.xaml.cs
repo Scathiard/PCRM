@@ -14,8 +14,9 @@ public partial class App : Application
         var position = Array.IndexOf(e.Args, "--config");
         var config = position >= 0 && position + 1 < e.Args.Length ? e.Args[position + 1] : RuntimePaths.DefaultConfigPath();
         var key = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(System.IO.Path.GetFullPath(config).ToUpperInvariant())));
+        // Share the lock with the previous executable while both builds may use the same machine configuration.
         _instanceLock = new Mutex(true, "Local\\MCRM-" + key, out var first);
-        if (!first) { MessageBox.Show("此资源管理工作台已经打开。", "MCRM"); Shutdown(); return; }
+        if (!first) { MessageBox.Show("此资源管理工作台已经打开。", "PCRM"); Shutdown(); return; }
         new MainWindow(new ResourceManagerEngine(config)).Show();
     }
     protected override void OnExit(ExitEventArgs e) { _instanceLock?.Dispose(); base.OnExit(e); }

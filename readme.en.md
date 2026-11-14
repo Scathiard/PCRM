@@ -15,7 +15,7 @@ A Windows desktop resource manager for Minecraft players and modpack creators. K
 - **Central library:** Import files or complete resource folders without changing external source files; retain different versions with the same name separately.
 - **Sharing and deduplication:** Use NTFS hard links on the same volume; copy resources on demand into a cache on another volume for instances there to share.
 - **Existing-instance intake:** Scan instances, compare content, and connect duplicate files to the library after confirmation.
-- **Version management:** Browse history, confirm version switches, and detach resources into independent copies.
+- **Version management:** When importing updates, see which instances use each resource and their current versions, choose which instances to upgrade, or keep independent copies.
 - **Custom types:** Define resource types by relative instance paths and configure ignore patterns.
 - **Configuration updates:** Update enabled shader and resource-pack references, inherit shader settings, and report configuration update failures.
 - **Status checks:** Distinguish shared latest versions, shared older versions, independent copies, modified content and untracked resources.
@@ -24,7 +24,7 @@ A Windows desktop resource manager for Minecraft players and modpack creators. K
 
 PCRM manages instance resource directories independently of launchers such as PCL and HMCL. It does not launch Minecraft, manage mod `.jar` files, resolve mod dependencies or download online resources.
 
-Shared files contain the same physical data. Editing a shared file in place outside the manager affects instances using it; detecting a change does not recover overwritten content.
+Editing a shared file in place outside the manager also changes the instances using it. After you accept the new content, the overwritten library version stays in history and is unavailable for rollback.
 
 ## License
 

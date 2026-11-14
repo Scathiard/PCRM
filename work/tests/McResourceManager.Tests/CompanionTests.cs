@@ -41,6 +41,6 @@ internal static partial class Program
         }
         Check(originalIris.SequenceEqual(File.ReadAllBytes(iris)), "Failed configuration replacement truncated the original.");
         Check(File.Exists(Path.Combine(instance.RootPath, "shaderpacks/Guard_v2.0.zip")), "Config failure rolled back the resource contrary to the contract.");
-        Check(!Directory.EnumerateFiles(Path.GetDirectoryName(iris)!, ".mcrm-config.*").Any(), "Configuration temp file was not cleaned up.");
+        Check(!Directory.EnumerateFiles(Path.GetDirectoryName(iris)!, ".pcrm-config.*").Any(), "Configuration temp file was not cleaned up.");
     }
 }

@@ -24,7 +24,8 @@ public partial class MainWindow
         NameEditor.Text = row.Name; DescriptionEditor.Text = row.Resource?.Description ?? "";
         NameEditor.IsEnabled = DescriptionEditor.IsEnabled = row.Resource is not null;
         VersionHistory.Text = row.Resource is null ? "收编后即可记录与切换版本。" : string.Join(Environment.NewLine, row.Resource.Versions
-            .OrderByDescending(v => v.CreatedAtUtcTicks).Select(v => $"{v.VersionLabel}   ·   {new DateTime(v.CreatedAtUtcTicks, DateTimeKind.Utc).ToLocalTime():yyyy-MM-dd} {(v.VersionId == row.Resource.LatestVersionId ? "· 最新" : "")}"));
+            .OrderByDescending(v => v.CreatedAtUtcTicks).Select(v => $"{v.VersionLabel}   ·   {new DateTime(v.CreatedAtUtcTicks, DateTimeKind.Utc).ToLocalTime():yyyy-MM-dd} "
+                + (v.MasterEntryOverwritten ? "· 主库已被覆盖" : v.VersionId == row.Resource.LatestVersionId ? "· 最新" : "")));
         var users = _machine?.Instances.Where(i => _states.TryGetValue(i.InstanceId, out var views) && views.Any(v => v.MatchedResourceId == row.ResourceId)).Select(i => i.DisplayName) ?? [];
         UsageText.Text = row.Resource is null ? "" : $"使用实例：{string.Join("、", users.DefaultIfEmpty("暂无"))}";
         var version = row.Resource?.Versions.FirstOrDefault(v => v.VersionId == row.VersionId);
@@ -50,12 +51,13 @@ public partial class MainWindow
             ? states.Where(v => v.MatchedResourceId == resource.ResourceId).Select(v => v.MatchedVersionId).Distinct().ToArray() : [];
         var currentId = current.Length == 1 ? current[0] : null;
         VersionList.ItemsSource = resource.Versions.OrderByDescending(v => v.CreatedAtUtcTicks)
-            .Select(v => new VersionChoice(v.VersionId, $"{v.VersionLabel}{(v.VersionId == currentId ? " · 当前" : "")}{(v.VersionId == resource.LatestVersionId ? " · 最新" : "")}", "", v.VersionId == resource.LatestVersionId)).ToArray();
+            .Select(v => new VersionChoice(v.VersionId, $"{v.VersionLabel}{(v.VersionId == currentId ? " · 当前" : "")}"
+                + (v.MasterEntryOverwritten ? " · 主库已被覆盖" : v.VersionId == resource.LatestVersionId ? " · 最新" : ""), !v.MasterEntryOverwritten)).ToArray();
         VersionList.SelectedItem = VersionList.Items.Cast<VersionChoice>().FirstOrDefault(v => v.Id == selectedVersion);
     }
     private async void SwitchVersion(object sender, RoutedEventArgs e)
     {
-        if (_versionRow?.ResourceId is not { } resourceId || VersionList.SelectedItem is not VersionChoice version || DeployInstance.SelectedItem is not GameInstance instance)
+        if (_versionRow?.ResourceId is not { } resourceId || VersionList.SelectedItem is not VersionChoice { CanDeploy: true } version || DeployInstance.SelectedItem is not GameInstance instance)
         { StatusText.Text = "请选择版本和目标实例。"; return; }
         VersionPopup.IsOpen = false;
         await RunUi(async ct =>
@@ -86,6 +88,7 @@ public partial class MainWindow
     private void LocateFile(object sender, RoutedEventArgs e)
     {
         if (ResourceList.SelectedItem is not ResourceRow row) return;
+        if (row.FullPath.Length == 0) { StatusText.Text = "此版本的主库文件已被覆盖。"; return; }
         try { Process.Start(new ProcessStartInfo("explorer.exe") { UseShellExecute = true, Arguments = $"/select,\"{row.FullPath}\"" }); }
         catch (Exception error) { StatusText.Text = error.Message; }
     }

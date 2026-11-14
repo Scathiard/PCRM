@@ -15,6 +15,8 @@ internal static partial class Program
             ("intake, duplicate, same-name coexistence and persistence", Intake),
             ("hardlink, version switch, configuration and old-version preservation", Versions),
             ("external overwrite, deletion and controlled-copy detection", ExternalChanges),
+            ("accepted overwrite, old copies, duplicate bytes and retry", AcceptOverwrite),
+            ("legacy vault metadata, interrupted swaps and repeated startup", LegacyVault),
             ("folder trees, detach, remove and custom types", Folders),
             ("harvest classification, execution, savings and repeated submission", Harvest),
             ("rollback, interrupted recovery and backup preservation", Recovery),

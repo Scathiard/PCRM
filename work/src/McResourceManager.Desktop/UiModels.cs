@@ -8,7 +8,7 @@ using McResourceManager.Core.Domain;
 namespace McResourceManager.Desktop;
 
 internal sealed record SidebarItem(string Id, string Title, string Subtitle);
-internal sealed record VersionChoice(string Id, string Label, string Date, bool IsLatest);
+internal sealed record VersionChoice(string Id, string Label, bool CanDeploy);
 internal sealed class ResourceRow
 {
     public required string Group { get; init; }

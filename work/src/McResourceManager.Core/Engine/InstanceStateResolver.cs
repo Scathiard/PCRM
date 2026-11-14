@@ -40,6 +40,9 @@ public sealed partial class ResourceManagerEngine
                         || f.ReplicaFileIdsByVolume.Values.Any(actualIds.Contains)))
                     .ThenByDescending(pair => pair.Version.CreatedAtUtcTicks).ToArray();
                 var match = candidates.FirstOrDefault();
+                var intact = false;
+                foreach (var candidate in candidates)
+                    if (await ResourceFiles.MatchesAsync(path, candidate.Version, ct)) { match = candidate; intact = true; break; }
                 var copy = _machine.ControlledCopies.FirstOrDefault(c => c.InstanceId == instance.InstanceId
                     && c.TypeId == typeId && c.InstanceEntryName.Equals(name, StringComparison.OrdinalIgnoreCase));
                 LogicalResource? resource = match.Resource ?? Index.Resources.FirstOrDefault(r => r.ResourceId == copy?.ResourceId);
@@ -47,11 +50,11 @@ public sealed partial class ResourceManagerEngine
                 var state = MountState.WildUntracked;
                 if (resource is not null && version is not null)
                 {
-                    var intact = await ResourceFiles.MatchesAsync(path, version, ct);
+                    if (match.Version is null) intact = await ResourceFiles.MatchesAsync(path, version, ct);
                     if (!intact) state = MountState.TamperedAlert;
                     else
                     {
-                        var validAnchor = HasLiveAnchor(instance, resource, version, actualIds);
+                        var validAnchor = !version.MasterEntryOverwritten && HasLiveAnchor(instance, resource, version, actualIds);
                         state = match.Version is not null && validAnchor
                             ? version.VersionId == resource.LatestVersionId ? MountState.LinkedLatest : MountState.LinkedOldVersion
                             : MountState.ControlledCopy;

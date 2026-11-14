@@ -12,8 +12,10 @@ namespace McResourceManager.Core.FileSystem;
 /// </summary>
 public static partial class NtfsDriver
 {
-    public const string StagePrefix = ".mcrm-stage.";
-    public const string BackupPrefix = ".mcrm-bak.";
+    public const string StagePrefix = ".pcrm-stage.";
+    public const string BackupPrefix = ".pcrm-bak.";
+    private const string LegacyStagePrefix = ".mcrm-stage.";
+    private const string LegacyBackupPrefix = ".mcrm-bak.";
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -68,15 +70,14 @@ public static partial class NtfsDriver
     public static bool IsSameVolume(string pathA, string pathB) =>
         string.Equals(GetVolumeRoot(pathA), GetVolumeRoot(pathB), StringComparison.OrdinalIgnoreCase);
 
-    public static bool IsInternalTempOrBackupName(string entryName) =>
-        entryName.StartsWith(StagePrefix, StringComparison.OrdinalIgnoreCase) ||
-        entryName.StartsWith(BackupPrefix, StringComparison.OrdinalIgnoreCase);
+    public static bool IsInternalTempOrBackupName(string entryName) => IsStage(entryName) || IsBackup(entryName);
+    private static bool IsStage(string name) => name.StartsWith(StagePrefix, StringComparison.OrdinalIgnoreCase)
+        || name.StartsWith(LegacyStagePrefix, StringComparison.OrdinalIgnoreCase);
+    private static bool IsBackup(string name) => name.StartsWith(BackupPrefix, StringComparison.OrdinalIgnoreCase)
+        || name.StartsWith(LegacyBackupPrefix, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
-    /// 扫描并恢复目录中因进程异常中断遗留的暂存项 (.mcrm-stage.&lt;TargetName&gt;) 与备份项 (.mcrm-bak.&lt;TargetName&gt;)：
-    /// 1. 任何 .mcrm-stage.* 均为未提交半成品，直接清理；
-    /// 2. 若存在 .mcrm-bak.&lt;TargetName&gt; 且原目标 &lt;TargetName&gt; 缺失，说明在替换中途中断，自动将备份改名还原回 &lt;TargetName&gt;；
-    /// 3. 若原目标 &lt;TargetName&gt; 已存在，为防止误删尚未核实的恢复材料，默认保留 .mcrm-bak.&lt;TargetName&gt; 并返回告警路径供上层核验。
+    /// 清理两代程序的暂存文件。只有目标缺失且备份唯一时才还原，歧义时保留全部备份。
     /// </summary>
     public static IReadOnlyList<string> RecoverInterruptedSwapsInDirectory(string directoryPath)
     {
@@ -85,39 +86,29 @@ public static partial class NtfsDriver
             return [];
 
         var warnings = new List<string>();
+        var backups = new List<string>();
         foreach (var entryPath in Directory.EnumerateFileSystemEntries(directoryPath))
         {
             ResourceFiles.AssertNoLinks(entryPath);
             var name = Path.GetFileName(entryPath);
-            if (name.StartsWith(StagePrefix, StringComparison.OrdinalIgnoreCase))
+            if (IsStage(name)) CleanupPathIfExists(entryPath);
+            else if (IsBackup(name)) backups.Add(entryPath);
+        }
+        foreach (var group in backups.GroupBy(path => Path.GetFileName(path)[BackupPrefix.Length..], StringComparer.OrdinalIgnoreCase))
+        {
+            if (string.IsNullOrWhiteSpace(group.Key) || group.Key is "." or "..") continue;
+            var original = ResourceFiles.Child(directoryPath, group.Key);
+            if (!ResourceFiles.Exists(original) && group.Count() == 1) ResourceFiles.Move(group.First(), original);
+            else
             {
-                CleanupPathIfExists(entryPath);
-                continue;
-            }
-
-            if (name.StartsWith(BackupPrefix, StringComparison.OrdinalIgnoreCase))
-            {
-                var originalName = name[BackupPrefix.Length..];
-                if (string.IsNullOrWhiteSpace(originalName))
-                    continue;
-
-                var originalFullPath = Path.Combine(directoryPath, originalName);
-                if (!File.Exists(originalFullPath) && !Directory.Exists(originalFullPath))
-                {
-                    if (Directory.Exists(entryPath)) Directory.Move(entryPath, originalFullPath);
-                    else File.Move(entryPath, originalFullPath);
-                }
-                else
-                {
-                    warnings.Add($"发现中断残留备份 {entryPath} 且目标 {originalFullPath} 已存在，已保留备份未自动删除。");
-                }
+                warnings.Add($"发现恢复备份，请核对后再操作：{string.Join("、", group)}");
             }
         }
         return warnings;
     }
 
     /// <summary>
-    /// 安全部署或替换单文件/文件夹硬链接（文件名直接编码原目标名：.mcrm-stage.&lt;TargetName&gt; 与 .mcrm-bak.&lt;TargetName&gt;）。
+    /// 通过同目录暂存、备份与替换部署单文件或文件夹硬链接。
     /// </summary>
     public static void DeployHardLinkEntry(string sourceEntryPath, string targetEntryPath)
     {
@@ -138,7 +129,9 @@ public static partial class NtfsDriver
 
         var stagePath = Path.Combine(parentDir, $"{StagePrefix}{targetName}");
         var backupPath = Path.Combine(parentDir, $"{BackupPrefix}{targetName}");
-        if (ResourceFiles.Exists(stagePath) || ResourceFiles.Exists(backupPath))
+        if (ResourceFiles.Exists(stagePath) || ResourceFiles.Exists(backupPath)
+            || ResourceFiles.Exists(Path.Combine(parentDir, LegacyStagePrefix + targetName))
+            || ResourceFiles.Exists(Path.Combine(parentDir, LegacyBackupPrefix + targetName)))
             throw new IOException("目标存在待核验的暂存或备份，请先执行恢复检查。");
 
         try

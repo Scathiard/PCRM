@@ -28,6 +28,6 @@ Editing a shared file in place outside the manager also changes the instances us
 
 ## License
 
-No license is granted for project-owned code and assets in this version. All rights reserved. Third-party materials remain subject to their own licenses and notices.
+Project-owned code and assets are released into the public domain under [The Unlicense](UNLICENSE). Third-party materials remain subject to their own licenses and notices.
 
 Imported Minecraft resources remain subject to their own licenses.

@@ -28,6 +28,6 @@ Editing a shared file in place outside the manager also changes the instances us
 
 ## License
 
-The source is available under [PolyForm Noncommercial 1.0.0](LICENSE), permitting noncommercial use, modification and redistribution as defined by the license. Commercial use is not licensed. This project adds no author-attribution requirement, but redistribution must include the license text or its URL.
+No license is granted for project-owned code and assets in this version. All rights reserved. Third-party materials remain subject to their own licenses and notices.
 
 Imported Minecraft resources remain subject to their own licenses.
